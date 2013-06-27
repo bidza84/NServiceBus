@@ -2,7 +2,6 @@ namespace NServiceBus.Hosting.Tests
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using NUnit.Framework;
     using Profiles;
 
@@ -22,9 +21,8 @@ namespace NServiceBus.Hosting.Tests
         {
             var allAssemblies = AssemblyPathHelper.GetAllAssemblies();
             var profileManager = new ProfileManager(allAssemblies, null, new[] { typeof(MyProfile).FullName }, null);
-            Assert.IsTrue(profileManager.activeProfiles.Any(x => x == typeof(MyProfile)));
-            Assert.IsTrue(profileManager.activeProfiles.Any(x => x == typeof(AlsoThisInterface)));
-            Assert.AreEqual(2, profileManager.activeProfiles.Count);
+            Assert.Contains(typeof(MyProfile),profileManager.activeProfiles);
+            Assert.AreEqual(1, profileManager.activeProfiles.Count);
         }
 
         [Test]
@@ -35,6 +33,15 @@ namespace NServiceBus.Hosting.Tests
             var profileManager = new ProfileManager(allAssemblies, null, args, new List<Type> { typeof(Production) });
             var configureLogging = profileManager.GetImplementor<IConfigureLogging>(typeof(IConfigureLoggingForProfile<>));
             Assert.AreEqual(configureLogging.GetType(), typeof(CustomLoggingProfile));
+        }
+
+        [Test]
+        public void Profiles_should_be_filtered_by_most_specific()
+        {
+            var allAssemblies = AssemblyPathHelper.GetAllAssemblies();
+            var args = new[] { typeof(CustomProductionProfile).FullName };
+            var profileManager = new ProfileManager(allAssemblies, null, args, new List<Type> { typeof(Production) });
+            Assert.IsFalse(profileManager.activeProfiles.Contains(typeof(Production)));
         }
 
         public interface CustomProductionProfile : Production

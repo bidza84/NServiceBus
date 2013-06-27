@@ -41,8 +41,13 @@ namespace NServiceBus.Hosting.Profiles
             var implements = new List<Type>(profiles);
             foreach (var interfaces in profiles.Select(p => p.GetInterfaces()))
             {
-                implements.AddRange(interfaces.Where(t => (typeof(IProfile).IsAssignableFrom(t) && t != typeof(IProfile)) && !profiles.Contains(t)));
+                implements.AddRange(interfaces.Where(t => 
+                    typeof(IProfile).IsAssignableFrom(t) && 
+                    t != typeof(IProfile) && 
+                    !profiles.Any(t.IsAssignableFrom)
+                    ));
             }
+
             activeProfiles = implements;
         }
 
