@@ -55,7 +55,7 @@ namespace NServiceBus.Hosting.Profiles
             return GetImplementor<IConfigureLogging>(typeof(IConfigureLoggingForProfile<>));
         }
 
-        private T GetImplementor<T>(Type openGenericType) where T : class
+        internal T GetImplementor<T>(Type openGenericType) where T : class
         {
             var options = new List<Type>();
             foreach (var a in assembliesToScan)
