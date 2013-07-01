@@ -2,12 +2,15 @@ namespace NServiceBus.Hosting.Tests
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
+    using System.Reflection;
     using NUnit.Framework;
     using Profiles;
 
     [TestFixture]
     public class ProfileManagerTests
     {
+        List<Assembly> allAssemblies = AssemblyPathHelper.GetAllAssemblies();
         public interface MyProfile : IProfile, AlsoThisInterface
         {
         }
@@ -19,48 +22,103 @@ namespace NServiceBus.Hosting.Tests
         [Test]
         public void ActiveProfileInMyAssembly()
         {
-            var allAssemblies = AssemblyPathHelper.GetAllAssemblies();
-            var profileManager = new ProfileManager(allAssemblies, null, new[] { typeof(MyProfile).FullName }, null);
+            var profiles = new[] { typeof(MyProfile).FullName };
+            var profileManager = new ProfileManager(allAssemblies, null, profiles, null);
             Assert.Contains(typeof(MyProfile),profileManager.activeProfiles);
-            Assert.AreEqual(1, profileManager.activeProfiles.Count);
+            Assert.Contains(typeof(AlsoThisInterface), profileManager.activeProfiles);
+            Assert.AreEqual(2, profileManager.activeProfiles.Count);
         }
 
         [Test]
-        public void Should_use_most_specific_profile()
+        public void Should_return_all_implementations_when_using_a_inherited_profile()
         {
-            var allAssemblies = AssemblyPathHelper.GetAllAssemblies();
-            var args = new[] { typeof(CustomProductionProfile).FullName };
-            var profileManager = new ProfileManager(allAssemblies, null, args, new List<Type> { typeof(Production) });
-            var configureLogging = profileManager.GetImplementor<IConfigureLogging>(typeof(IConfigureLoggingForProfile<>));
-            Assert.AreEqual(configureLogging.GetType(), typeof(CustomLoggingProfile));
+            var profiles = new[] { typeof(ChildProfile).FullName };
+            var profileManager = new ProfileManager(allAssemblies, null, profiles, null);
+            var configureLogging = profileManager.GetImplementor<IHandleProfile>(typeof(IHandleProfile<>))
+                                                 .ToList();
+            Assert.IsTrue(configureLogging.Any(x => x.GetType() == typeof(ChildProfileHandler)));
+            Assert.IsTrue(configureLogging.Any(x => x.GetType() == typeof(BaseProfileHandler)));
         }
 
         [Test]
-        public void Profiles_should_be_filtered_by_most_specific()
+        public void Should_not_return_all_implementations_when_using_a_base_profile()
         {
-            var allAssemblies = AssemblyPathHelper.GetAllAssemblies();
-            var args = new[] { typeof(CustomProductionProfile).FullName };
-            var profileManager = new ProfileManager(allAssemblies, null, args, new List<Type> { typeof(Production) });
-            Assert.IsFalse(profileManager.activeProfiles.Contains(typeof(Production)));
+            var profiles = new[] { typeof(BaseProfile).FullName };
+            var profileManager = new ProfileManager(allAssemblies, null, profiles, null);
+            var configureLogging = profileManager.GetImplementor<IHandleProfile>(typeof(IHandleProfile<>))
+                                                 .ToList();
+            Assert.IsTrue(configureLogging.Any(x => x.GetType() == typeof(BaseProfileHandler)));
+            Assert.IsFalse(configureLogging.Any(x => x.GetType() == typeof(ChildProfileHandler)));
         }
 
-        public interface CustomProductionProfile : Production
+        [Test]
+        public void Should_not_duplicate_implementations_when_using_multiple_profiles()
+        {
+            var profiles = new[]
+                           {
+                               typeof(BaseProfile).FullName,
+                               typeof(ChildProfile).FullName
+                           };
+            var profileManager = new ProfileManager(allAssemblies, null, profiles, null);
+            var configureLogging = profileManager.GetImplementor<IHandleProfile>(typeof(IHandleProfile<>))
+                                                 .ToList();
+            Assert.AreEqual(2, configureLogging.Count);
+            Assert.IsTrue(configureLogging.Any(x => x.GetType() == typeof(BaseProfileHandler)));
+            Assert.IsTrue(configureLogging.Any(x => x.GetType() == typeof(ChildProfileHandler)));
+        }
+
+
+        public interface ChildProfile : BaseProfile
+        {
+        }
+        public interface BaseProfile : IProfile
         {
         }
 
-        public class CustomLoggingProfile : IConfigureLoggingForProfile<CustomProductionProfile>
+        public class ChildProfileHandler : IHandleProfile<ChildProfile>
         {
-            public void Configure(IConfigureThisEndpoint specifier)
+            public void ProfileActivated()
             {
             }
         }
 
-        public class ProductionLoggingHandler : IConfigureLoggingForProfile<Production>
+        public class BaseProfileHandler : IHandleProfile<BaseProfile>
         {
-            public void Configure(IConfigureThisEndpoint specifier)
+            public void ProfileActivated()
             {
-
             }
         }
+
+        //[Test]
+        //public void Should_xxx_when_implementations_overlap()
+        //{
+        //    var profiles = new[]
+        //                   {
+        //                       typeof(SimpleProfile).FullName,
+        //                   };
+        //    var profileManager = new ProfileManager(allAssemblies, null, profiles, null);
+        //    var configureLogging = profileManager.GetImplementor<IHandleProfile>(typeof(IHandleProfile<>))
+        //                                         .ToList();
+        //    Assert.AreEqual(2, configureLogging.Count);
+        //    Assert.IsTrue(configureLogging.Any(x => x.GetType() == typeof(Handler2)));
+        //    Assert.IsTrue(configureLogging.Any(x => x.GetType() == typeof(Handler1)));
+        //}
+
+        //public interface SimpleProfile : IProfile
+        //{
+        //}
+        //public class Handler1 : IHandleProfile<SimpleProfile>
+        //{
+        //    public void ProfileActivated()
+        //    {
+        //    }
+        //}
+
+        //public class Handler2 : IHandleProfile<SimpleProfile>
+        //{
+        //    public void ProfileActivated()
+        //    {
+        //    }
+        //}
     }
 }
